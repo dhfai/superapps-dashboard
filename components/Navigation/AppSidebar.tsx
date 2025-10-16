@@ -150,15 +150,15 @@ const data = {
       items: [
         {
           title: "Target Profit",
-          url: "/dashboard/money-management/target-profit",
+          url: "/dashboard/money-management/profit",
         },
         {
-          title: "Target",
-          url: "/workspace/projects/archived",
+          title: "Progress",
+          url: "/dashboard/money-management/progress",
         },
         {
           title: "Templates",
-          url: "/workspace/projects/templates",
+          url: "/dashboard/money-management/templates",
         },
       ],
     },
