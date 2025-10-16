@@ -1,9 +1,9 @@
-import AiCodeReviews from "./Bento/ai-code-reviews"
-import RealtimeCodingPreviews from "./Bento/real-time-previews"
-import OneClickIntegrationsIllustration from "./Bento/one-click-integrations-illustration"
-import MCPConnectivityIllustration from "./Bento/mcp-connectivity-illustration" // Updated import
-import EasyDeployment from "./Bento/easy-deployment"
-import ParallelCodingAgents from "./Bento/parallel-agents" // Updated import
+import AiCodeReviews from "../Bento/ai-code-reviews"
+import RealtimeCodingPreviews from "../Bento/real-time-previews"
+import OneClickIntegrationsIllustration from "../Bento/one-click-integrations-illustration"
+import MCPConnectivityIllustration from "../Bento/mcp-connectivity-illustration" // Updated import
+import EasyDeployment from "../Bento/easy-deployment"
+import ParallelCodingAgents from "../Bento/parallel-agents" // Updated import
 
 const BentoCard = ({ title, description, Component }: { title: string; description: string; Component: React.FC }) => (
   <div className="overflow-hidden rounded-2xl border border-white/20 flex flex-col justify-start items-start relative">
