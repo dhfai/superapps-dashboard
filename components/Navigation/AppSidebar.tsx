@@ -138,6 +138,11 @@ const data = {
   ],
   catatan: [
     {
+        title: "Catatan Harian",
+        url: "/dashboard/catatan/catatan-harian/",
+        icon: IconLayoutGrid,
+    },
+    {
       title: "Money Management",
       url: "/dashboard/money-management/",
       icon: IconLayoutGrid,
@@ -309,7 +314,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <a href="#">
                 <IconInnerShadowTop className="!size-5" />
-                <span className="text-base font-semibold">Acme Inc.</span>
+                <span className="text-base font-semibold">dhf.AI</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
