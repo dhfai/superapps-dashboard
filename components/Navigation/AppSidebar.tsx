@@ -21,7 +21,8 @@ import {
   IconLayoutGrid,
   IconClipboardList,
   IconPresentationAnalytics,
-  IconNotebook
+  IconNotebook,
+  IconTransactionDollar
 } from "@tabler/icons-react"
 
 import { NavCollapsible } from "@/components/Navigation/NavCollapsible"
@@ -140,28 +141,22 @@ const data = {
         icon: IconNotebook,
     },
     {
-      title: "Money Management",
-      url: "/dashboard/money-management/",
-      icon: IconLayoutGrid,
-    },
-    {
-      title: "Target Harian",
+      title: "Financial",
       url: "#",
-      icon: IconFolder,
+      icon: IconTransactionDollar,
       isActive: true,
       items: [
         {
-          title: "Target Profit",
-          url: "/dashboard/money-management/profit",
+            title: "Profit Harian",
+            url: "/dashboard/catatan/financial/profit-harian/",
+            icon: IconTransactionDollar
         },
         {
-          title: "Progress",
-          url: "/dashboard/money-management/progress",
+            title: "Backtest",
+            url: "/dashboard/catatan/financial/backtest/",
+            icon: IconTransactionDollar
         },
-        {
-          title: "Templates",
-          url: "/dashboard/money-management/templates",
-        },
+
       ],
     },
     {
