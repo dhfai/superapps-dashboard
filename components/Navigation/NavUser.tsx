@@ -8,6 +8,7 @@ import {
   IconUserCircle,
 } from "@tabler/icons-react"
 import { useEffect, useState } from "react"
+import { useAuth } from "@/lib/context/AuthContext"
 
 import {
   Avatar,
@@ -40,12 +41,17 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+  const { logout } = useAuth()
   const [mounted, setMounted] = useState(false)
 
   // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  const handleLogout = async () => {
+    await logout()
+  }
 
   if (!mounted) {
     // Render fallback tanpa dropdown saat SSR
@@ -127,7 +133,7 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout}>
               <IconLogout />
               Log out
             </DropdownMenuItem>

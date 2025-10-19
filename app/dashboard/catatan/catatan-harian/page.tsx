@@ -126,7 +126,6 @@ export default function CatatanHarianPage() {
     tags: [] as string[],
   })
 
-  // Sensors for drag and drop
   const sensors = useSensors(
     useSensor(MouseSensor, {
       activationConstraint: {
@@ -175,9 +174,7 @@ export default function CatatanHarianPage() {
       return
     }
 
-    // Check if dragging between different sections (pin/unpin)
     if (overNote && activeNote.isPinned !== overNote.isPinned) {
-      // Toggle pin status when dragging to different section
       setNotes((items) => {
         return items.map((item) =>
           item.id === activeNote.id
@@ -186,7 +183,6 @@ export default function CatatanHarianPage() {
         )
       })
     } else if (active.id !== over.id && overNote) {
-      // Reorder within the same section
       setNotes((items) => {
         const oldIndex = items.findIndex((n) => n.id === active.id)
         const newIndex = items.findIndex((n) => n.id === over.id)
@@ -496,7 +492,7 @@ export default function CatatanHarianPage() {
       </Dialog>
 
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center justify-between px-6 py-4">
           <div>
             <h1 className="text-2xl font-bold">Catatan Harian</h1>
