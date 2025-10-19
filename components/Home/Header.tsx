@@ -11,10 +11,16 @@ export function Header() {
   const navItems = [
     { name: "Features", href: "#features-section" },
     { name: "Pricing", href: "#pricing-section" },
-    { name: "Testimonials", href: "#testimonials-section" }, // Changed from Docs to Testimonials
+    { name: "Testimonials", href: "#testimonials-section" },
+    { name: "Dashboard", href: "/dashboard" },
   ]
 
   const handleScroll = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    // Don't prevent default for regular routes (not hash links)
+    if (!href.startsWith('#')) {
+      return;
+    }
+
     e.preventDefault()
     const targetId = href.substring(1) // Remove '#' from href
     const targetElement = document.getElementById(targetId)
@@ -44,9 +50,14 @@ export function Header() {
           </nav>
         </div>
         <div className="flex items-center gap-4">
-          <Link href="https://vercel.com/home" target="_blank" rel="noopener noreferrer" className="hidden md:block">
-            <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 px-6 py-2 rounded-full font-medium shadow-sm">
-              Try for Free
+          <Link href="/login" className="hidden md:block">
+            <Button variant="ghost" className="text-foreground hover:bg-secondary/50 px-6 py-2 rounded-full font-medium">
+              Sign In
+            </Button>
+          </Link>
+          <Link href="/register" className="hidden md:block">
+            <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-2 rounded-full font-medium shadow-lg">
+              Get Started
             </Button>
           </Link>
           <Sheet>
@@ -65,15 +76,20 @@ export function Header() {
                   <Link
                     key={item.name}
                     href={item.href}
-                    onClick={(e) => handleScroll(e, item.href)} // Add onClick handler
+                    onClick={(e) => handleScroll(e, item.href)}
                     className="text-[#888888] hover:text-foreground justify-start text-lg py-2"
                   >
                     {item.name}
                   </Link>
                 ))}
-                <Link href="https://vercel.com/home" target="_blank" rel="noopener noreferrer" className="w-full mt-4">
-                  <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 px-6 py-2 rounded-full font-medium shadow-sm">
-                    Try for Free
+                <Link href="/register" className="w-full mt-4">
+                  <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-2 rounded-full font-medium shadow-lg w-full">
+                    Get Started
+                  </Button>
+                </Link>
+                <Link href="/login" className="w-full">
+                  <Button variant="outline" className="w-full px-6 py-2 rounded-full font-medium">
+                    Sign In
                   </Button>
                 </Link>
               </nav>

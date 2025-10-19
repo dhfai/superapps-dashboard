@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useAuth } from "@/lib/context/AuthContext"
 import {
   IconCamera,
   IconChartBar,
@@ -20,6 +21,7 @@ import {
   IconLayoutGrid,
   IconClipboardList,
   IconPresentationAnalytics,
+  IconNotebook
 } from "@tabler/icons-react"
 
 import { NavCollapsible } from "@/components/Navigation/NavCollapsible"
@@ -38,11 +40,6 @@ import {
 } from "@/components/ui/sidebar"
 
 const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
   navMain: [
     // {
     //   title: "Dashboard",
@@ -137,6 +134,11 @@ const data = {
     },
   ],
   catatan: [
+    {
+        title: "Catatan Harian",
+        url: "/dashboard/catatan/catatan-harian/",
+        icon: IconNotebook,
+    },
     {
       title: "Money Management",
       url: "/dashboard/money-management/",
@@ -298,6 +300,19 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { user, loading } = useAuth();
+
+  // Prepare user data for NavUser component
+  const userData = user ? {
+    name: user.username || user.profile?.full_name || "User",
+    email: user.email,
+    avatar: "/placeholder-user.jpg", // You can add avatar URL from profile if available
+  } : {
+    name: "Loading...",
+    email: "...",
+    avatar: "/placeholder-user.jpg",
+  };
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -309,7 +324,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <a href="#">
                 <IconInnerShadowTop className="!size-5" />
-                <span className="text-base font-semibold">Acme Inc.</span>
+                <span className="text-base font-semibold">dhf.AI</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -332,7 +347,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        {loading ? (
+          <div className="px-4 py-2 text-sm text-gray-500">Loading...</div>
+        ) : (
+          <NavUser user={userData} />
+        )}
       </SidebarFooter>
     </Sidebar>
   )
