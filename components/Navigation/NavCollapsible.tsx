@@ -33,6 +33,7 @@ export function NavCollapsible({
     items?: {
       title: string
       url: string
+      iconSub?: Icon
     }[]
   }[]
 }) {
@@ -92,6 +93,7 @@ export function NavCollapsible({
                         <SidebarMenuSubItem key={subItem.title}>
                           <SidebarMenuSubButton asChild>
                             <Link href={subItem.url}>
+                                {subItem.iconSub && <subItem.iconSub />}
                               <span>{subItem.title}</span>
                             </Link>
                           </SidebarMenuSubButton>

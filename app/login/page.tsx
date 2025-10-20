@@ -58,17 +58,18 @@ export default function LoginPage() {
       const response = await authService.login(formData);
 
       if (response.success && response.data) {
-        // Show success message
-        setSuccess(true);
-
-        // Save token and user data
+        // Save token and user data FIRST
         tokenService.setToken(response.data.token);
         userService.setUser(response.data.user);
 
-        // Wait a bit to show success message, then redirect
+        // Show success message
+        setSuccess(true);
+
+        // Small delay to show success message, then redirect with replace
         setTimeout(() => {
-          router.push(redirectUrl);
-        }, 1000);
+          router.replace(redirectUrl); // Use replace instead of push to prevent back button issues
+          router.refresh(); // Force refresh to reload auth state
+        }, 800);
       } else {
         setError(response.message || "Login failed");
         setLoading(false);
