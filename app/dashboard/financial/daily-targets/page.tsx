@@ -41,6 +41,17 @@ import { IconTarget, IconPlus, IconTrash, IconTrendingUp, IconTrendingDown, Icon
 import { dailyTargetService, DailyTarget, tradingActivityService } from "@/lib/api/finance";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import {
+  getCurrentLocalDate,
+  getCurrentLocalTime,
+  formatForDateTimeLocalInput,
+  convertDateTimeLocalToISO,
+  convertISOToDateTimeLocal,
+  getUserTimezone,
+  formatTimeForDisplay,
+  formatDateForDisplay as formatDateDisplay,
+  getTimezoneAbbreviation,
+} from "@/lib/utils/datetime";
 
 // Trading pairs with icons and categories
 const TRADING_PAIRS = [
@@ -101,8 +112,11 @@ export default function DailyTargetsPage() {
     item: null,
   });
 
+  // Currency state
+  const [currency, setCurrency] = useState<'IDR' | 'USD'>('IDR');
+
   const [formData, setFormData] = useState<any>({
-    date: format(new Date(), "yyyy-MM-dd'T'00:00:00'Z'"),
+    date: "",
     income_target: "",
     expense_limit: "",
     savings_target: "",
@@ -116,8 +130,20 @@ export default function DailyTargetsPage() {
     lot_size: "",
     symbol: "",
     description: "",
-    trade_time: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+    trade_time: "",
   });
+
+  // Initialize dates on client side only to avoid hydration mismatch
+  useEffect(() => {
+    setFormData((prev: any) => ({
+      ...prev,
+      date: prev.date || convertDateTimeLocalToISO(getCurrentLocalDate()),
+    }));
+    setTradeFormData((prev: any) => ({
+      ...prev,
+      trade_time: prev.trade_time || formatForDateTimeLocalInput(),
+    }));
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -148,6 +174,11 @@ export default function DailyTargetsPage() {
         return targetDate === today;
       });
 
+
+      console.log("Today's target:", targetToday);
+
+
+
       setTodayTarget(targetToday || null);
 
       // Fetch today's trades if target exists
@@ -175,14 +206,16 @@ export default function DailyTargetsPage() {
     try {
       setSubmitting(true);
 
-      // Convert string values to numbers
+      // Convert formatted string values to numbers (handles both IDR and USD formats)
       const submitData = {
         date: formData.date,
-        income_target: parseFloat(formData.income_target) || 0,
-        expense_limit: parseFloat(formData.expense_limit) || 0,
-        savings_target: parseFloat(formData.savings_target) || 0,
+        income_target: parseFormattedNumber(formData.income_target),
+        expense_limit: parseFormattedNumber(formData.expense_limit),
+        savings_target: parseFormattedNumber(formData.savings_target),
         notes: formData.notes,
       };
+
+      console.log('Submitting target data:', submitData); // Debug log
 
       await dailyTargetService.create(submitData);
       toast.success("Target created successfully");
@@ -235,15 +268,15 @@ export default function DailyTargetsPage() {
     try {
       setSubmitting(true);
 
-      // Convert string values to numbers
+      // Convert string values to numbers (parse formatted numbers)
       const submitData = {
         trade_type: tradeFormData.trade_type,
-        amount: parseFloat(tradeFormData.amount) || 0,
+        amount: parseFormattedNumber(tradeFormData.amount),
         pips: parseFloat(tradeFormData.pips) || 0,
         lot_size: parseFloat(tradeFormData.lot_size) || 0,
         symbol: tradeFormData.symbol,
         description: tradeFormData.description,
-        trade_time: tradeFormData.trade_time,
+        trade_time: convertDateTimeLocalToISO(tradeFormData.trade_time),
       };
 
       await dailyTargetService.addTrade(todayTarget.id, submitData);
@@ -268,8 +301,9 @@ export default function DailyTargetsPage() {
   };
 
   const resetForm = () => {
+    // Safe to use client-side date functions here as this is only called on user action
     setFormData({
-      date: format(new Date(), "yyyy-MM-dd'T'00:00:00'Z'"),
+      date: typeof window !== 'undefined' ? convertDateTimeLocalToISO(getCurrentLocalDate()) : "",
       income_target: "",
       expense_limit: "",
       savings_target: "",
@@ -278,6 +312,7 @@ export default function DailyTargetsPage() {
   };
 
   const resetTradeForm = () => {
+    // Safe to use client-side date functions here as this is only called on user action
     setTradeFormData({
       trade_type: "win",
       amount: "",
@@ -285,16 +320,49 @@ export default function DailyTargetsPage() {
       lot_size: "",
       symbol: "",
       description: "",
-      trade_time: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+      trade_time: typeof window !== 'undefined' ? formatForDateTimeLocalInput() : "",
     });
   };
 
+  // Format number input with thousands separator
+  const formatNumberInput = (value: string): string => {
+    // Remove all non-digit characters (handles both . and , separators)
+    const numbers = value.replace(/\D/g, '');
+    if (!numbers) return '';
+
+    // Format with separator based on currency
+    // IDR: 1000000 → 1.000.000 (dots)
+    // USD: 1000000 → 1,000,000 (commas)
+    const separator = currency === 'IDR' ? '.' : ',';
+    return numbers.replace(/\B(?=(\d{3})+(?!\d))/g, separator);
+  };
+
+  // Parse formatted number back to raw number
+  // Handles both formats:
+  // - IDR format: "1.000.000" → 1000000
+  // - USD format: "1,000,000" → 1000000
+  const parseFormattedNumber = (value: string): number => {
+    // Remove ALL non-digit characters (dots, commas, spaces, etc.)
+    const numbers = value.replace(/\D/g, '');
+    // Convert to integer (safe for both formats)
+    return numbers ? parseInt(numbers, 10) : 0;
+  };
+
+  // Format currency for display
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(amount);
+    if (currency === 'IDR') {
+      return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0,
+      }).format(amount);
+    } else {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 0,
+      }).format(amount);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -358,8 +426,11 @@ export default function DailyTargetsPage() {
               <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
                   <DialogTitle>Create Trading Target</DialogTitle>
-                  <DialogDescription>
-                    Set your profit target and loss limit for the day
+                  <DialogDescription className="space-y-1">
+                    <span className="block">Set your profit target and loss limit for the day</span>
+                    <span className="block text-xs text-muted-foreground">
+                      🌍 Your timezone: <strong>{getUserTimezone()}</strong>
+                    </span>
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit}>
@@ -375,45 +446,108 @@ export default function DailyTargetsPage() {
                       />
                     </div>
 
+                    {/* Currency Selector */}
                     <div className="space-y-2">
-                      <Label htmlFor="income_target">Profit Target (IDR) *</Label>
+                      <Label htmlFor="currency" className="flex items-center gap-2">
+                        Currency Format
+                        <Badge variant="outline" className="text-xs font-normal">
+                          {currency === 'IDR' ? 'Format: 100.000' : 'Format: 100,000'}
+                        </Badge>
+                      </Label>
+                      <Select value={currency} onValueChange={(value: 'IDR' | 'USD') => setCurrency(value)}>
+                        <SelectTrigger className="gap-2">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="IDR">
+                            <div className="flex items-center gap-2">
+                              <span>🇮🇩</span>
+                              <div className="flex flex-col">
+                                <span className="font-semibold">IDR</span>
+                                <span className="text-xs text-muted-foreground">Indonesian Rupiah (1.000.000)</span>
+                              </div>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="USD">
+                            <div className="flex items-center gap-2">
+                              <span>🇺🇸</span>
+                              <div className="flex flex-col">
+                                <span className="font-semibold">USD</span>
+                                <span className="text-xs text-muted-foreground">US Dollar (1,000,000)</span>
+                              </div>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {currency === 'IDR'
+                          ? '💡 Use dots (.) as thousand separator: 5.000.000'
+                          : '💡 Use commas (,) as thousand separator: 5,000,000'
+                        }
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="income_target">Profit Target ({currency}) *</Label>
                       <Input
                         id="income_target"
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
                         value={formData.income_target}
-                        onChange={(e) => setFormData({ ...formData, income_target: e.target.value })}
+                        onChange={(e) => {
+                          const formatted = formatNumberInput(e.target.value);
+                          setFormData({ ...formData, income_target: formatted });
+                        }}
                         required
-                        placeholder="e.g. 1000000"
+                        placeholder={currency === 'IDR' ? "e.g. 5.000.000" : "e.g. 100,000"}
                       />
+                      {formData.income_target && (
+                        <p className="text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                          <IconTrendingUp className="w-3 h-3" />
+                          {formatCurrency(parseFormattedNumber(formData.income_target))}
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="expense_limit">Loss Limit / Stop Loss (IDR) *</Label>
+                      <Label htmlFor="expense_limit">Loss Limit / Stop Loss ({currency}) *</Label>
                       <Input
                         id="expense_limit"
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
                         value={formData.expense_limit}
-                        onChange={(e) => setFormData({ ...formData, expense_limit: e.target.value })}
+                        onChange={(e) => {
+                          const formatted = formatNumberInput(e.target.value);
+                          setFormData({ ...formData, expense_limit: formatted });
+                        }}
                         required
-                        placeholder="e.g. 500000"
+                        placeholder={currency === 'IDR' ? "e.g. 500.000" : "e.g. 50,000"}
                       />
+                      {formData.expense_limit && (
+                        <p className="text-xs font-semibold text-red-600 dark:text-red-400 flex items-center gap-1">
+                          <IconTrendingDown className="w-3 h-3" />
+                          {formatCurrency(parseFormattedNumber(formData.expense_limit))}
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="savings_target">Savings Target (IDR) *</Label>
+                      <Label htmlFor="savings_target">Savings Target ({currency}) *</Label>
                       <Input
                         id="savings_target"
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
                         value={formData.savings_target}
-                        onChange={(e) => setFormData({ ...formData, savings_target: e.target.value })}
+                        onChange={(e) => {
+                          const formatted = formatNumberInput(e.target.value);
+                          setFormData({ ...formData, savings_target: formatted });
+                        }}
                         required
+                        placeholder={currency === 'IDR' ? "e.g. 1.000.000" : "e.g. 10,000"}
                       />
+                      {formData.savings_target && (
+                        <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                          <IconTarget className="w-3 h-3" />
+                          {formatCurrency(parseFormattedNumber(formData.savings_target))}
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -714,12 +848,13 @@ export default function DailyTargetsPage() {
                         </TableCell>
                         <TableCell>
                           <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
+                            type="text"
                             value={tradeFormData.amount}
-                            onChange={(e) => setTradeFormData({ ...tradeFormData, amount: e.target.value })}
-                            placeholder="Amount"
+                            onChange={(e) => {
+                              const formatted = formatNumberInput(e.target.value);
+                              setTradeFormData({ ...tradeFormData, amount: formatted });
+                            }}
+                            placeholder={currency === 'IDR' ? "e.g. 100.000" : "e.g. 1,000"}
                             className="h-8"
                           />
                         </TableCell>
@@ -788,23 +923,29 @@ export default function DailyTargetsPage() {
                           />
                         </TableCell>
                         <TableCell>
-                          <Input
-                            type="time"
-                            value={tradeFormData.trade_time ? format(new Date(tradeFormData.trade_time), "HH:mm") : ""}
-                            onChange={(e) => {
-                              const today = format(new Date(), "yyyy-MM-dd");
-                              const newDateTime = new Date(`${today}T${e.target.value}:00`).toISOString();
-                              setTradeFormData({ ...tradeFormData, trade_time: newDateTime });
-                            }}
-                            className="h-8"
-                          />
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              type="time"
+                              value={tradeFormData.trade_time ? tradeFormData.trade_time.split('T')[1]?.slice(0, 5) || getCurrentLocalTime() : getCurrentLocalTime()}
+                              onChange={(e) => {
+                                const currentDate = tradeFormData.trade_time?.split('T')[0] || getCurrentLocalDate();
+                                const newDateTime = `${currentDate}T${e.target.value}`;
+                                setTradeFormData({ ...tradeFormData, trade_time: newDateTime });
+                              }}
+                              className="h-8 text-xs w-24"
+                              title={`Your timezone: ${getUserTimezone()}`}
+                            />
+                            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                              {getTimezoneAbbreviation()}
+                            </span>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Button
                             size="sm"
                             onClick={(e) => {
                               e.preventDefault();
-                              if (!tradeFormData.amount || parseFloat(tradeFormData.amount) <= 0) {
+                              if (!tradeFormData.amount || parseFormattedNumber(tradeFormData.amount) <= 0) {
                                 toast.error("Please enter amount");
                                 return;
                               }
@@ -864,8 +1005,8 @@ export default function DailyTargetsPage() {
                           <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
                             {trade.description || "-"}
                           </TableCell>
-                          <TableCell className="text-xs">
-                            {format(new Date(trade.trade_time), "HH:mm")}
+                          <TableCell className="text-xs font-medium" title={`${getUserTimezone()}`}>
+                            {formatTimeForDisplay(trade.trade_time, true)}
                           </TableCell>
                           <TableCell>
                             <Button
@@ -1021,7 +1162,7 @@ export default function DailyTargetsPage() {
                 )}
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-muted-foreground">Time</span>
-                  <span className="text-sm font-semibold">{format(new Date(deleteDialog.item.trade.trade_time), "HH:mm")}</span>
+                  <span className="text-sm font-semibold">{formatTimeForDisplay(deleteDialog.item.trade.trade_time, true)}</span>
                 </div>
               </div>
             )}
