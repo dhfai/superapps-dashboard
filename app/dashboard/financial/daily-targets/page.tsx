@@ -7,7 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -20,19 +26,57 @@ import {
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
-  SheetFooter,
 } from "@/components/ui/sheet";
-import { IconTarget, IconPlus, IconEdit, IconTrash, IconTrendingUp, IconTrendingDown, IconChartLine, IconCheck, IconX, IconChartCandle, IconEye } from "@tabler/icons-react";
-import { dailyTargetService, DailyTarget, tradingActivityService, TradingActivity } from "@/lib/api/finance";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { IconTarget, IconPlus, IconTrash, IconTrendingUp, IconTrendingDown, IconChartLine, IconCheck, IconX, IconChartCandle, IconHistory, IconDeviceFloppy, IconCurrencyDollar, IconCurrencyEuro, IconCurrencyPound, IconCurrencyYen, IconCurrencyFrank, IconCoin, IconDiamond, IconCurrency } from "@tabler/icons-react";
+import { dailyTargetService, DailyTarget, tradingActivityService } from "@/lib/api/finance";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
+// Trading pairs with icons and categories
+const TRADING_PAIRS = [
+  { value: "EUR/USD", label: "EUR/USD", icon: IconCurrencyEuro, category: "Major" },
+  { value: "GBP/USD", label: "GBP/USD", icon: IconCurrencyPound, category: "Major" },
+  { value: "USD/JPY", label: "USD/JPY", icon: IconCurrencyYen, category: "Major" },
+  { value: "USD/CHF", label: "USD/CHF", icon: IconCurrencyFrank, category: "Major" },
+  { value: "AUD/USD", label: "AUD/USD", icon: IconCurrencyDollar, category: "Major" },
+  { value: "USD/CAD", label: "USD/CAD", icon: IconCurrencyDollar, category: "Major" },
+  { value: "NZD/USD", label: "NZD/USD", icon: IconCurrencyDollar, category: "Major" },
+  { value: "EUR/GBP", label: "EUR/GBP", icon: IconCurrencyEuro, category: "Cross" },
+  { value: "EUR/JPY", label: "EUR/JPY", icon: IconCurrencyEuro, category: "Cross" },
+  { value: "GBP/JPY", label: "GBP/JPY", icon: IconCurrencyPound, category: "Cross" },
+  { value: "XAU/USD", label: "XAU/USD (Gold)", icon: IconDiamond, category: "Commodity" },
+  { value: "BTC/USD", label: "BTC/USD (Bitcoin)", icon: IconCurrency, category: "Crypto" },
+  { value: "ETH/USD", label: "ETH/USD (Ethereum)", icon: IconCoin, category: "Crypto" },
+];
+
+// Helper function to get pair icon
+const getPairIcon = (symbol: string) => {
+  const pair = TRADING_PAIRS.find(p => p.value === symbol);
+  if (!pair) return IconCurrencyDollar;
+  return pair.icon;
+};
+
+// Time sessions
+const TRADING_SESSIONS = [
+  { value: "asian", label: "Asian (00:00-09:00)" },
+  { value: "london", label: "London (08:00-17:00)" },
+  { value: "newyork", label: "New York (13:00-22:00)" },
+  { value: "custom", label: "Custom Time" }
+];
+
 export default function DailyTargetsPage() {
   const [targets, setTargets] = useState<any[]>([]);
+  const [todayTarget, setTodayTarget] = useState<any>(null);
   const [monthSummary, setMonthSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -40,27 +84,36 @@ export default function DailyTargetsPage() {
   // Create Target Dialog
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
-  // Detail/View Target Sheet (Drawer from right)
-  const [selectedTarget, setSelectedTarget] = useState<any>(null);
-  const [isDetailSheetOpen, setIsDetailSheetOpen] = useState(false);
+  // History Drawer
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+
+  // Trading Activities for today
   const [tradingActivities, setTradingActivities] = useState<any[]>([]);
 
-  // Trade Dialog (inside detail dialog)
-  const [isTradeDialogOpen, setIsTradeDialogOpen] = useState(false);
+  // Delete Confirmation Dialogs
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    type: 'target' | 'trade' | null;
+    item: any;
+  }>({
+    isOpen: false,
+    type: null,
+    item: null,
+  });
 
-  const [formData, setFormData] = useState<DailyTarget>({
+  const [formData, setFormData] = useState<any>({
     date: format(new Date(), "yyyy-MM-dd'T'00:00:00'Z'"),
-    income_target: 0,
-    expense_limit: 0,
-    savings_target: 0,
+    income_target: "",
+    expense_limit: "",
+    savings_target: "",
     notes: "",
   });
 
   const [tradeFormData, setTradeFormData] = useState({
     trade_type: "win" as "win" | "loss",
-    amount: 0,
-    pips: 0,
-    lot_size: 0,
+    amount: "",
+    pips: "",
+    lot_size: "",
     symbol: "",
     description: "",
     trade_time: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
@@ -87,25 +140,31 @@ export default function DailyTargetsPage() {
       const lastDay = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0];
       const targetsRes = await dailyTargetService.getAll(firstDay, lastDay, 1, 31);
       setTargets(targetsRes.data.targets || []);
+
+      // Find today's target
+      const today = format(new Date(), "yyyy-MM-dd");
+      const targetToday = targetsRes.data.targets?.find((t: any) => {
+        const targetDate = format(new Date(t.date), "yyyy-MM-dd");
+        return targetDate === today;
+      });
+
+      setTodayTarget(targetToday || null);
+
+      // Fetch today's trades if target exists
+      if (targetToday) {
+        try {
+          const tradesRes = await dailyTargetService.getTrades(targetToday.id);
+          setTradingActivities(tradesRes.data || []);
+        } catch (error) {
+          console.error("Error fetching trades:", error);
+          setTradingActivities([]);
+        }
+      }
     } catch (error: any) {
       console.error("Error fetching data:", error);
       toast.error(error.message || "Failed to fetch data");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleOpenDetail = async (target: any) => {
-    setSelectedTarget(target);
-    setIsDetailSheetOpen(true);
-
-    // Fetch trades for this target
-    try {
-      const tradesRes = await dailyTargetService.getTrades(target.id);
-      setTradingActivities(tradesRes.data || []);
-    } catch (error) {
-      console.error("Error fetching trades:", error);
-      setTradingActivities([]);
     }
   };
 
@@ -116,20 +175,16 @@ export default function DailyTargetsPage() {
     try {
       setSubmitting(true);
 
-      // Check if target already exists for this date
-      const selectedDate = format(new Date(formData.date), "yyyy-MM-dd");
-      const existingTarget = targets.find(t => {
-        const targetDate = format(new Date(t.date), "yyyy-MM-dd");
-        return targetDate === selectedDate;
-      });
+      // Convert string values to numbers
+      const submitData = {
+        date: formData.date,
+        income_target: parseFloat(formData.income_target) || 0,
+        expense_limit: parseFloat(formData.expense_limit) || 0,
+        savings_target: parseFloat(formData.savings_target) || 0,
+        notes: formData.notes,
+      };
 
-      if (existingTarget) {
-        toast.error(`Target already exists for ${format(new Date(formData.date), "dd MMM yyyy")}`);
-        setSubmitting(false);
-        return;
-      }
-
-      await dailyTargetService.create(formData);
+      await dailyTargetService.create(submitData);
       toast.success("Target created successfully");
       setIsCreateDialogOpen(false);
       resetForm();
@@ -137,8 +192,6 @@ export default function DailyTargetsPage() {
     } catch (error: any) {
       if (error.response?.status === 409) {
         toast.error("Target already exists for this date");
-      } else if (error.response?.status === 404) {
-        toast.error("Resource not found");
       } else {
         toast.error(error.response?.data?.message || error.message || "Failed to create target");
       }
@@ -148,95 +201,78 @@ export default function DailyTargetsPage() {
   };
 
   const handleDelete = async (id: string, target: any) => {
-    const confirmMessage = `Delete target for ${formatDate(target.date)}?\n\nTarget: ${formatCurrency(target.income_target)}\nThis action cannot be undone.`;
+    setDeleteDialog({
+      isOpen: true,
+      type: 'target',
+      item: { id, target },
+    });
+  };
 
-    if (!window.confirm(confirmMessage)) return;
+  const confirmDelete = async () => {
+    if (!deleteDialog.item) return;
 
     try {
-      await dailyTargetService.delete(Number(id));
-      toast.success("Target deleted successfully");
-      setTargets(targets.filter(t => t.id !== id));
+      if (deleteDialog.type === 'target') {
+        await dailyTargetService.delete(Number(deleteDialog.item.id));
+        toast.success("Target deleted successfully");
+      } else if (deleteDialog.type === 'trade') {
+        await tradingActivityService.delete(Number(deleteDialog.item.id));
+        toast.success("Trade deleted successfully");
+      }
+
+      setDeleteDialog({ isOpen: false, type: null, item: null });
       fetchData();
     } catch (error: any) {
-      if (error.response?.status === 404) {
-        toast.error("Target not found");
-      } else {
-        toast.error(error.response?.data?.message || error.message || "Failed to delete target");
-      }
+      toast.error(error.response?.data?.message || error.message || "Failed to delete");
       fetchData();
     }
   };
 
   const handleSubmitTrade = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting || !selectedTarget) return;
+    if (submitting || !todayTarget) return;
 
     try {
       setSubmitting(true);
-      await dailyTargetService.addTrade(selectedTarget.id, tradeFormData);
+
+      // Convert string values to numbers
+      const submitData = {
+        trade_type: tradeFormData.trade_type,
+        amount: parseFloat(tradeFormData.amount) || 0,
+        pips: parseFloat(tradeFormData.pips) || 0,
+        lot_size: parseFloat(tradeFormData.lot_size) || 0,
+        symbol: tradeFormData.symbol,
+        description: tradeFormData.description,
+        trade_time: tradeFormData.trade_time,
+      };
+
+      await dailyTargetService.addTrade(todayTarget.id, submitData);
       toast.success(`${tradeFormData.trade_type === "win" ? "Win" : "Loss"} trade recorded successfully`);
-      setIsTradeDialogOpen(false);
       resetTradeForm();
-
-      // Refresh target detail
-      const updatedTarget = await dailyTargetService.getById(selectedTarget.id);
-      setSelectedTarget(updatedTarget.data);
-
-      // Refresh trades
-      const tradesRes = await dailyTargetService.getTrades(selectedTarget.id);
-      setTradingActivities(tradesRes.data || []);
-
-      // Refresh main list
       fetchData();
     } catch (error: any) {
-      if (error.response?.status === 404) {
-        toast.error("Target not found");
-      } else if (error.response?.status === 409) {
-        toast.error("Duplicate trade entry");
-      } else {
-        toast.error(error.response?.data?.message || error.message || "Failed to record trade");
-      }
+      toast.error(error.response?.data?.message || error.message || "Failed to record trade");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteTrade = async (tradeId: string, trade: any) => {
-    if (!selectedTarget) return;
+    if (!todayTarget) return;
 
-    const confirmMessage = `Delete this ${trade.trade_type} trade?\n\nAmount: ${formatCurrency(trade.amount)}\nSymbol: ${trade.symbol || 'N/A'}\nTime: ${format(new Date(trade.trade_time), "HH:mm")}\n\nThis will update your daily statistics.`;
-
-    if (!window.confirm(confirmMessage)) return;
-
-    try {
-      await tradingActivityService.delete(Number(tradeId));
-      toast.success("Trade deleted successfully");
-
-      // Refresh target detail
-      const updatedTarget = await dailyTargetService.getById(selectedTarget.id);
-      setSelectedTarget(updatedTarget.data);
-
-      // Refresh trades
-      const tradesRes = await dailyTargetService.getTrades(selectedTarget.id);
-      setTradingActivities(tradesRes.data || []);
-
-      // Refresh main list
-      fetchData();
-    } catch (error: any) {
-      if (error.response?.status === 404) {
-        toast.error("Trade not found");
-      } else {
-        toast.error(error.response?.data?.message || error.message || "Failed to delete trade");
-      }
-    }
+    setDeleteDialog({
+      isOpen: true,
+      type: 'trade',
+      item: { id: tradeId, trade },
+    });
   };
 
   const resetForm = () => {
     setFormData({
       date: format(new Date(), "yyyy-MM-dd'T'00:00:00'Z'"),
-      income_target: 0,
-      expense_limit: 0,
-      savings_target: 0,
+      income_target: "",
+      expense_limit: "",
+      savings_target: "",
       notes: "",
     });
   };
@@ -244,9 +280,9 @@ export default function DailyTargetsPage() {
   const resetTradeForm = () => {
     setTradeFormData({
       trade_type: "win",
-      amount: 0,
-      pips: 0,
-      lot_size: 0,
+      amount: "",
+      pips: "",
+      lot_size: "",
       symbol: "",
       description: "",
       trade_time: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
@@ -267,13 +303,6 @@ export default function DailyTargetsPage() {
       month: 'long',
       year: 'numeric',
     });
-  };
-
-  const getProgressColor = (progress: number) => {
-    if (progress >= 100) return "text-green-600";
-    if (progress >= 75) return "text-blue-600";
-    if (progress >= 50) return "text-yellow-600";
-    return "text-red-600";
   };
 
   if (loading) {
@@ -298,798 +327,728 @@ export default function DailyTargetsPage() {
             </h1>
           </div>
           <p className="text-muted-foreground ml-[52px]">
-            Manage your daily trading goals and track performance
+            {format(new Date(), "EEEE, dd MMMM yyyy")}
           </p>
         </div>
 
-        {/* Create Target Dialog */}
-        <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
-          setIsCreateDialogOpen(open);
-          if (!open) resetForm();
-        }}>
-          <DialogTrigger asChild>
-            <Button size="default" className="gap-2">
-              <IconPlus className="w-4 h-4" />
-              Create Target
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>Create Trading Target</DialogTitle>
-              <DialogDescription>
-                Set your profit target and loss limit for the day
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="date">Date *</Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={formData.date ? format(new Date(formData.date), "yyyy-MM-dd") : ""}
-                    onChange={(e) => setFormData({ ...formData, date: new Date(e.target.value).toISOString() })}
-                    required
-                  />
-                </div>
+        <div className="flex items-center gap-2">
+          {/* History Button */}
+          <Button
+            variant="outline"
+            size="default"
+            className="gap-2"
+            onClick={() => setIsHistoryDrawerOpen(true)}
+          >
+            <IconHistory className="w-4 h-4" />
+            History
+          </Button>
 
-                <div className="space-y-2">
-                  <Label htmlFor="income_target">Profit Target (IDR) *</Label>
-                  <Input
-                    id="income_target"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.income_target}
-                    onChange={(e) => setFormData({ ...formData, income_target: parseFloat(e.target.value) || 0 })}
-                    required
-                    placeholder="e.g. 1000000"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="expense_limit">Loss Limit / Stop Loss (IDR) *</Label>
-                  <Input
-                    id="expense_limit"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.expense_limit}
-                    onChange={(e) => setFormData({ ...formData, expense_limit: parseFloat(e.target.value) || 0 })}
-                    required
-                    placeholder="e.g. 500000"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="savings_target">Savings Target (IDR) *</Label>
-                  <Input
-                    id="savings_target"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.savings_target}
-                    onChange={(e) => setFormData({ ...formData, savings_target: parseFloat(e.target.value) || 0 })}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notes / Trading Plan</Label>
-                  <Textarea
-                    id="notes"
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    placeholder="Your trading strategy, market conditions, plan for the day..."
-                    rows={3}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsCreateDialogOpen(false)}
-                  disabled={submitting}
-                >
-                  Cancel
+          {/* Create Target Dialog - Only show if no target today */}
+          {!todayTarget && (
+            <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+              setIsCreateDialogOpen(open);
+              if (!open) resetForm();
+            }}>
+              <DialogTrigger asChild>
+                <Button size="default" className="gap-2">
+                  <IconPlus className="w-4 h-4" />
+                  Create Target
                 </Button>
-                <Button type="submit" disabled={submitting}>
-                  {submitting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Creating...
-                    </>
-                  ) : (
-                    "Create"
-                  )}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>Create Trading Target</DialogTitle>
+                  <DialogDescription>
+                    Set your profit target and loss limit for the day
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit}>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="date">Date *</Label>
+                      <Input
+                        id="date"
+                        type="date"
+                        value={formData.date ? format(new Date(formData.date), "yyyy-MM-dd") : ""}
+                        onChange={(e) => setFormData({ ...formData, date: new Date(e.target.value).toISOString() })}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="income_target">Profit Target (IDR) *</Label>
+                      <Input
+                        id="income_target"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.income_target}
+                        onChange={(e) => setFormData({ ...formData, income_target: e.target.value })}
+                        required
+                        placeholder="e.g. 1000000"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="expense_limit">Loss Limit / Stop Loss (IDR) *</Label>
+                      <Input
+                        id="expense_limit"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.expense_limit}
+                        onChange={(e) => setFormData({ ...formData, expense_limit: e.target.value })}
+                        required
+                        placeholder="e.g. 500000"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="savings_target">Savings Target (IDR) *</Label>
+                      <Input
+                        id="savings_target"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.savings_target}
+                        onChange={(e) => setFormData({ ...formData, savings_target: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="notes">Notes / Trading Plan</Label>
+                      <Textarea
+                        id="notes"
+                        value={formData.notes}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                        placeholder="Your trading strategy, market conditions, plan for the day..."
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsCreateDialogOpen(false)}
+                      disabled={submitting}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={submitting}>
+                      {submitting ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Creating...
+                        </>
+                      ) : (
+                        "Create"
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
       </div>
 
-      {/* Monthly Summary */}
-      {monthSummary && (
+      {/* Monthly Summary Stats */}
+      {/* {monthSummary && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardDescription className="text-xs font-medium flex items-center gap-1.5 text-green-600">
+                <IconCheck className="w-3.5 h-3.5" />
+                Targets Hit
+              </CardDescription>
+              <CardTitle className="text-2xl font-bold text-green-600">
+                {monthSummary.days_met_income} / {monthSummary.total_days}
+              </CardTitle>
+              <CardDescription className="text-xs mt-2">
+                Total: <span className="font-semibold">{formatCurrency(monthSummary.total_actual_income)}</span>
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardDescription className="text-xs font-medium flex items-center gap-1.5">
+                <IconTrendingDown className="w-3.5 h-3.5" />
+                Within Limit
+              </CardDescription>
+              <CardTitle className="text-2xl font-bold">
+                {monthSummary.days_met_expense} / {monthSummary.total_days}
+              </CardTitle>
+              <CardDescription className="text-xs mt-2">
+                Loss: <span className="font-semibold text-red-600">{formatCurrency(monthSummary.total_actual_expense)}</span>
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardDescription className="text-xs font-medium flex items-center gap-1.5">
+                <IconTrendingUp className="w-3.5 h-3.5" />
+                Net P/L
+              </CardDescription>
+              <CardTitle className={`text-2xl font-bold ${
+                (monthSummary.total_actual_income - monthSummary.total_actual_expense) >= 0
+                  ? 'text-green-600'
+                  : 'text-red-600'
+              }`}>
+                {formatCurrency(monthSummary.total_actual_income - monthSummary.total_actual_expense)}
+              </CardTitle>
+              <CardDescription className="text-xs mt-2">
+                Target: <span className="font-semibold">{formatCurrency(monthSummary.total_income_target)}</span>
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardDescription className="text-xs font-medium flex items-center gap-1.5">
+                <IconTarget className="w-3.5 h-3.5" />
+                Savings
+              </CardDescription>
+              <CardTitle className="text-2xl font-bold">
+                {monthSummary.days_met_savings} / {monthSummary.total_days}
+              </CardTitle>
+              <CardDescription className="text-xs mt-2">
+                <span className="font-semibold">{formatCurrency(monthSummary.total_actual_savings)}</span>
+                {" / "}{formatCurrency(monthSummary.total_savings_target)}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      )} */}
+
+      {/* Today's Target Section */}
+      {!todayTarget ? (
         <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2.5">
-              <IconChartLine className="w-5 h-5 text-primary" />
-              <div>
-                <CardTitle className="text-xl">
-                  Monthly Trading Performance
-                </CardTitle>
-                <CardDescription className="mt-1">
-                  {monthSummary.total_days} trading days
-                </CardDescription>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <IconTarget className="w-16 h-16 text-muted-foreground/50 mb-4" />
+            <h3 className="text-xl font-semibold mb-2">No Target for Today</h3>
+            <p className="text-muted-foreground text-center mb-6">
+              You haven't created a trading target for today yet.<br />
+              Create one to start tracking your trading activities.
+            </p>
+            <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
+              <IconPlus className="w-4 h-4" />
+              Create Today's Target
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Today's Target Info */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg">Today's Target - {formatDate(todayTarget.date)}</CardTitle>
+                  <CardDescription className="mt-1">
+                    {todayTarget.is_completed ? (
+                      <Badge variant={todayTarget.actual_income >= todayTarget.income_target ? "default" : "destructive"}>
+                        {todayTarget.actual_income >= todayTarget.income_target ? "🎯 Target Reached" : "🛑 Stop Loss Hit"}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-green-600 border-green-600">
+                        ⚡ Active
+                      </Badge>
+                    )}
+                  </CardDescription>
+                </div>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {/* Profit Targets Hit */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardDescription className="text-xs font-medium flex items-center gap-1.5 text-green-600">
-                    <IconCheck className="w-3.5 h-3.5" />
-                    Targets Hit
-                  </CardDescription>
-                  <CardTitle className="text-2xl font-bold text-green-600">
-                    {monthSummary.days_met_income} / {monthSummary.total_days}
-                  </CardTitle>
-                  <CardDescription className="text-xs mt-2">
-                    Total: <span className="font-semibold">{formatCurrency(monthSummary.total_actual_income)}</span>
-                  </CardDescription>
-                </CardHeader>
-              </Card>
+            </CardHeader>
+            <CardContent>
+              {/* Progress Bars */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {/* Profit Progress */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-green-600">Profit Progress</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatCurrency(todayTarget.actual_income || 0)} / {formatCurrency(todayTarget.income_target)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-green-600">
+                        {((todayTarget.actual_income || 0) / todayTarget.income_target * 100).toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Remaining: {formatCurrency(Math.max(0, todayTarget.income_target - (todayTarget.actual_income || 0)))}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="relative w-full h-3 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(((todayTarget.actual_income || 0) / todayTarget.income_target * 100), 100)}%` }}
+                    />
+                  </div>
+                </div>
 
-              {/* Days Within Loss Limit */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardDescription className="text-xs font-medium flex items-center gap-1.5">
-                    <IconTrendingDown className="w-3.5 h-3.5" />
-                    Within Limit
-                  </CardDescription>
-                  <CardTitle className="text-2xl font-bold">
-                    {monthSummary.days_met_expense} / {monthSummary.total_days}
-                  </CardTitle>
-                  <CardDescription className="text-xs mt-2">
-                    Loss: <span className="font-semibold text-red-600">{formatCurrency(monthSummary.total_actual_expense)}</span>
-                  </CardDescription>
-                </CardHeader>
-              </Card>
+                {/* Loss Progress */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-red-600">Loss Limit</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatCurrency(todayTarget.actual_expense || 0)} / {formatCurrency(todayTarget.expense_limit)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-red-600">
+                        {((todayTarget.actual_expense || 0) / todayTarget.expense_limit * 100).toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Remaining: {formatCurrency(Math.max(0, todayTarget.expense_limit - (todayTarget.actual_expense || 0)))}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="relative w-full h-3 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`absolute inset-0 rounded-full transition-all duration-500 ${
+                        ((todayTarget.actual_expense || 0) / todayTarget.expense_limit * 100) >= 80
+                          ? 'bg-gradient-to-r from-red-600 to-rose-600'
+                          : 'bg-gradient-to-r from-orange-500 to-red-500'
+                      }`}
+                      style={{ width: `${Math.min(((todayTarget.actual_expense || 0) / todayTarget.expense_limit * 100), 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
 
-              {/* Net Profit/Loss */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardDescription className="text-xs font-medium flex items-center gap-1.5">
-                    <IconTrendingUp className="w-3.5 h-3.5" />
-                    Net P/L
-                  </CardDescription>
-                  <CardTitle className={`text-2xl font-bold ${
-                    (monthSummary.total_actual_income - monthSummary.total_actual_expense) >= 0
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 rounded-lg bg-muted/30">
+                <div className="space-y-1 text-center">
+                  <p className="text-xs text-muted-foreground">Net P/L</p>
+                  <p className={`text-lg font-bold ${
+                    ((todayTarget.actual_income || 0) - (todayTarget.actual_expense || 0)) >= 0
                       ? 'text-green-600'
                       : 'text-red-600'
                   }`}>
-                    {formatCurrency(monthSummary.total_actual_income - monthSummary.total_actual_expense)}
-                  </CardTitle>
-                  <CardDescription className="text-xs mt-2">
-                    Target: <span className="font-semibold">{formatCurrency(monthSummary.total_income_target)}</span>
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-
-              {/* Savings Achieved */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardDescription className="text-xs font-medium flex items-center gap-1.5">
-                    <IconTarget className="w-3.5 h-3.5" />
-                    Savings
-                  </CardDescription>
-                  <CardTitle className="text-2xl font-bold">
-                    {monthSummary.days_met_savings} / {monthSummary.total_days}
-                  </CardTitle>
-                  <CardDescription className="text-xs mt-2">
-                    <span className="font-semibold">{formatCurrency(monthSummary.total_actual_savings)}</span>
-                    {" / "}{formatCurrency(monthSummary.total_savings_target)}
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Trading Targets List */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Trading History</CardTitle>
-          <CardDescription>Click on a target to view details and record trades</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {targets.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>No trading targets yet</p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={() => setIsCreateDialogOpen(true)}>
-                Create First Target
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {targets.map((target) => (
-                <div
-                  key={target.id}
-                  className="p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-3">
-                        <span className="font-semibold text-base">{formatDate(target.date)}</span>
-                        {target.is_completed && (
-                          <Badge
-                            variant={target.actual_income >= target.income_target ? "default" : "destructive"}
-                          >
-                            {target.actual_income >= target.income_target ? (
-                              <><IconCheck className="w-3.5 h-3.5 mr-1" />Target Reached</>
-                            ) : (
-                              <><IconX className="w-3.5 h-3.5 mr-1" />Stop Loss Hit</>
-                            )}
-                          </Badge>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">Target:</span>{" "}
-                          <span className="font-medium text-green-600">{formatCurrency(target.income_target)}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Actual:</span>{" "}
-                          <span className={`font-medium ${target.actual_income > 0 ? 'text-green-600' : ''}`}>
-                            {formatCurrency(target.actual_income || 0)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Trades:</span>{" "}
-                          <span className="font-medium">{target.total_trades || 0}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Win Rate:</span>{" "}
-                          <span className={`font-medium ${
-                            (target.win_rate || 0) >= 50 ? 'text-green-600' : 'text-red-600'
-                          }`}>
-                            {(target.win_rate || 0).toFixed(1)}%
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleOpenDetail(target)}
-                        className="gap-2"
-                      >
-                        <IconEye className="w-4 h-4" />
-                        View
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(target.id, target)}
-                        className="hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        <IconTrash className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
+                    {formatCurrency((todayTarget.actual_income || 0) - (todayTarget.actual_expense || 0))}
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Detail Sheet (Drawer from Right) - Enhanced Design */}
-      <Sheet open={isDetailSheetOpen} onOpenChange={setIsDetailSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-[900px] p-0 border-l-2 !overflow-hidden">
-          {selectedTarget && (
-            <div className="flex flex-col h-full">
-              {/* Gradient Header with Animation - STICKY */}
-              <div className="sticky top-0 z-50 border-b overflow-hidden bg-background shadow-md">
-                {/* Animated gradient background */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 animate-gradient-xy"></div>
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer"></div>
-
-                {/* Content */}
-                <SheetHeader className="relative z-20 px-6 py-6">
-                  <SheetTitle className="flex items-center gap-3 text-2xl font-bold mb-2">
-                    <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg shadow-blue-500/20">
-                      <IconChartCandle className="w-6 h-6 text-white" />
-                    </div>
-                    <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                      {formatDate(selectedTarget.date)}
-                    </span>
-                    {selectedTarget.is_completed && (
-                      <Badge
-                        variant={selectedTarget.actual_income >= selectedTarget.income_target ? "default" : "destructive"}
-                        className="animate-pulse shadow-lg"
-                      >
-                        {selectedTarget.actual_income >= selectedTarget.income_target ? "🎯 Target Reached" : "🛑 Stop Loss Hit"}
-                      </Badge>
-                    )}
-                  </SheetTitle>
-                  <SheetDescription className="text-base">
-                    View detailed statistics and manage your trades
-                  </SheetDescription>
-                </SheetHeader>
+                <div className="space-y-1 text-center">
+                  <p className="text-xs text-muted-foreground">Total Trades</p>
+                  <p className="text-lg font-bold">{todayTarget.total_trades || 0}</p>
+                </div>
+                <div className="space-y-1 text-center">
+                  <p className="text-xs text-muted-foreground">Wins / Losses</p>
+                  <p className="text-lg font-bold">
+                    <span className="text-green-600">{todayTarget.total_wins || 0}</span>
+                    {" / "}
+                    <span className="text-red-600">{todayTarget.total_losses || 0}</span>
+                  </p>
+                </div>
+                <div className="space-y-1 text-center">
+                  <p className="text-xs text-muted-foreground">Win Rate</p>
+                  <p className={`text-lg font-bold ${(todayTarget.win_rate || 0) >= 50 ? 'text-green-600' : 'text-red-600'}`}>
+                    {(todayTarget.win_rate || 0).toFixed(1)}%
+                  </p>
+                </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-6 py-6 bg-gradient-to-b from-transparent to-muted/20">
+              {todayTarget.notes && (
+                <div className="p-3 rounded-lg bg-muted/50 border">
+                  <p className="text-xs font-semibold text-muted-foreground mb-1">Trading Plan:</p>
+                  <p className="text-sm">{todayTarget.notes}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-              <Tabs defaultValue="stats" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 bg-muted/50 p-1 rounded-xl border shadow-sm">
-                  <TabsTrigger
-                    value="stats"
-                    className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300"
-                  >
-                    📊 Statistics
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="trades"
-                    className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300"
-                  >
-                    💰 Trades ({tradingActivities.length})
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="stats" className="space-y-6 mt-6">
-                  {/* Stats Grid - Enhanced with Hover Effects */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Card className="relative overflow-hidden group hover:shadow-xl hover:scale-105 transition-all duration-300 border-2 hover:border-blue-500/50">
-                      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      <CardHeader className="pb-3 relative z-10">
-                        <CardDescription className="text-xs font-semibold flex items-center gap-1.5 text-muted-foreground">
-                          <div className="p-1 rounded-md bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
-                            <IconChartLine className="w-3.5 h-3.5 text-blue-600" />
-                          </div>
-                          Total Trades
-                        </CardDescription>
-                        <CardTitle className="text-4xl font-black bg-gradient-to-br from-blue-600 to-blue-400 bg-clip-text text-transparent">
-                          {selectedTarget.total_trades || 0}
-                        </CardTitle>
-                      </CardHeader>
-                    </Card>
-
-                    <Card className="relative overflow-hidden group hover:shadow-xl hover:scale-105 transition-all duration-300 border-2 hover:border-green-500/50">
-                      <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      <CardHeader className="pb-3 relative z-10">
-                        <CardDescription className="text-xs font-semibold flex items-center gap-1.5 text-muted-foreground">
-                          <div className="p-1 rounded-md bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
-                            <IconTrendingUp className="w-3.5 h-3.5 text-green-600" />
-                          </div>
-                          Win Rate
-                        </CardDescription>
-                        <CardTitle className={`text-4xl font-black ${
-                          (selectedTarget.win_rate || 0) >= 50
-                            ? 'bg-gradient-to-br from-green-600 to-green-400 bg-clip-text text-transparent'
-                            : 'bg-gradient-to-br from-red-600 to-red-400 bg-clip-text text-transparent'
-                        }`}>
-                          {(selectedTarget.win_rate || 0).toFixed(1)}%
-                        </CardTitle>
-                      </CardHeader>
-                    </Card>
-
-                    <Card className="relative overflow-hidden group hover:shadow-xl hover:scale-105 transition-all duration-300 border-2 hover:border-green-500/50">
-                      <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      <CardHeader className="pb-3 relative z-10">
-                        <CardDescription className="text-xs font-semibold flex items-center gap-1.5 text-green-600">
-                          <div className="p-1 rounded-md bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
-                            <IconCheck className="w-3.5 h-3.5" />
-                          </div>
-                          Wins
-                        </CardDescription>
-                        <CardTitle className="text-4xl font-black bg-gradient-to-br from-green-600 to-green-400 bg-clip-text text-transparent">
-                          {selectedTarget.total_wins || 0}
-                        </CardTitle>
-                      </CardHeader>
-                    </Card>
-
-                    <Card className="relative overflow-hidden group hover:shadow-xl hover:scale-105 transition-all duration-300 border-2 hover:border-red-500/50">
-                      <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      <CardHeader className="pb-3 relative z-10">
-                        <CardDescription className="text-xs font-semibold flex items-center gap-1.5 text-red-600">
-                          <div className="p-1 rounded-md bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
-                            <IconX className="w-3.5 h-3.5" />
-                          </div>
-                          Losses
-                        </CardDescription>
-                        <CardTitle className="text-4xl font-black bg-gradient-to-br from-red-600 to-red-400 bg-clip-text text-transparent">
-                          {selectedTarget.total_losses || 0}
-                        </CardTitle>
-                      </CardHeader>
-                    </Card>
-                  </div>
-
-                  {/* Progress Cards - Enhanced with Glow Effects */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Profit Progress */}
-                    <Card className="relative overflow-hidden border-2 hover:border-green-500/50 hover:shadow-xl hover:shadow-green-500/10 transition-all duration-300 group">
-                      <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      <CardHeader className="pb-5 relative z-10">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg shadow-green-500/20 group-hover:shadow-green-500/40 transition-shadow">
-                              <IconTrendingUp className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                              <CardTitle className="text-lg font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Profit Target</CardTitle>
-                              <CardDescription className="text-xs mt-0.5">Daily trading goal</CardDescription>
-                            </div>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={`font-bold text-base px-3 py-1 shadow-sm ${
-                              (selectedTarget.income_progress || 0) >= 100 ? 'text-green-600 border-green-600 bg-green-50 dark:bg-green-950 animate-pulse' :
-                              (selectedTarget.income_progress || 0) >= 75 ? 'text-blue-600 border-blue-600 bg-blue-50 dark:bg-blue-950' :
-                              (selectedTarget.income_progress || 0) >= 50 ? 'text-yellow-600 border-yellow-600 bg-yellow-50 dark:bg-yellow-950' :
-                              'text-red-600 border-red-600 bg-red-50 dark:bg-red-950'
-                            }`}
+          {/* Today's Trades Table with Inline Input */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Today's Trades</CardTitle>
+              <CardDescription>{tradingActivities.length} trade{tradingActivities.length !== 1 ? 's' : ''} recorded</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[100px]">Type</TableHead>
+                      <TableHead className="w-[140px]">Amount</TableHead>
+                      <TableHead className="w-[100px]">Pips</TableHead>
+                      <TableHead className="w-[100px]">Lot Size</TableHead>
+                      <TableHead className="w-[130px]">Symbol</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="w-[180px]">Time</TableHead>
+                      <TableHead className="w-[100px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {/* Input Row - Always visible at top */}
+                    {!todayTarget.is_completed && (
+                      <TableRow className="bg-muted/30">
+                        <TableCell>
+                          <Select
+                            value={tradeFormData.trade_type}
+                            onValueChange={(value: "win" | "loss") => setTradeFormData({ ...tradeFormData, trade_type: value })}
                           >
-                            {selectedTarget.income_progress?.toFixed(0)}%
-                          </Badge>
-                        </div>
-
-                        {/* Enhanced Progress Bar with Glow */}
-                        <div className="relative w-full h-3 bg-muted rounded-full overflow-hidden shadow-inner">
-                          <div
-                            className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transition-all duration-500 shadow-lg shadow-green-500/50"
-                            style={{ width: `${Math.min(selectedTarget.income_progress || 0, 100)}%` }}
-                          >
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"></div>
-                          </div>
-                        </div>
-
-                        <div className="mt-5 space-y-3 text-sm">
-                          <div className="flex justify-between items-center p-2 rounded-lg bg-green-50/50 dark:bg-green-950/20 border border-green-200/50 dark:border-green-800/50">
-                            <span className="text-muted-foreground font-medium">Actual</span>
-                            <span className="font-bold text-lg text-green-600">
-                              {formatCurrency(selectedTarget.actual_income || 0)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                            <span className="text-muted-foreground">Remaining</span>
-                            <span className="font-semibold">
-                              {formatCurrency(selectedTarget.remaining_income || selectedTarget.income_target)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center pt-3 border-t-2 border-dashed">
-                            <span className="font-bold text-muted-foreground">Target</span>
-                            <span className="font-bold text-lg bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                              {formatCurrency(selectedTarget.income_target)}
-                            </span>
-                          </div>
-                        </div>
-                      </CardHeader>
-                    </Card>
-
-                    {/* Loss Limit */}
-                    <Card className="relative overflow-hidden border-2 hover:border-red-500/50 hover:shadow-xl hover:shadow-red-500/10 transition-all duration-300 group">
-                      <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      <CardHeader className="pb-5 relative z-10">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 shadow-lg shadow-red-500/20 group-hover:shadow-red-500/40 transition-shadow">
-                              <IconTrendingDown className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                              <CardTitle className="text-lg font-bold bg-gradient-to-r from-red-600 to-rose-600 bg-clip-text text-transparent">Loss Limit</CardTitle>
-                              <CardDescription className="text-xs mt-0.5">Stop loss threshold</CardDescription>
-                            </div>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={`font-bold text-base px-3 py-1 shadow-sm ${
-                              (selectedTarget.expense_progress || 0) >= 90 ? 'text-red-600 border-red-600 bg-red-50 dark:bg-red-950 animate-pulse' :
-                              (selectedTarget.expense_progress || 0) >= 70 ? 'text-orange-600 border-orange-600 bg-orange-50 dark:bg-orange-950' :
-                              (selectedTarget.expense_progress || 0) >= 50 ? 'text-yellow-600 border-yellow-600 bg-yellow-50 dark:bg-yellow-950' :
-                              'text-green-600 border-green-600 bg-green-50 dark:bg-green-950'
-                            }`}
-                          >
-                            {selectedTarget.expense_progress?.toFixed(0)}%
-                          </Badge>
-                        </div>
-
-                        {/* Enhanced Progress Bar with Glow */}
-                        <div className="relative w-full h-3 bg-muted rounded-full overflow-hidden shadow-inner">
-                          <div
-                            className={`absolute inset-0 rounded-full transition-all duration-500 ${
-                              (selectedTarget.expense_progress || 0) >= 90
-                                ? 'bg-gradient-to-r from-red-600 to-rose-600 shadow-lg shadow-red-500/50 animate-pulse'
-                                : 'bg-gradient-to-r from-red-500 to-rose-500 shadow-lg shadow-red-500/30'
-                            }`}
-                            style={{ width: `${Math.min(selectedTarget.expense_progress || 0, 100)}%` }}
-                          >
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"></div>
-                          </div>
-                        </div>
-
-                        <div className="mt-5 space-y-3 text-sm">
-                          <div className="flex justify-between items-center p-2 rounded-lg bg-red-50/50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/50">
-                            <span className="text-muted-foreground font-medium">Total Loss</span>
-                            <span className="font-bold text-lg text-red-600">
-                              {formatCurrency(selectedTarget.actual_expense || 0)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                            <span className="text-muted-foreground">Remaining</span>
-                            <span className="font-semibold">
-                              {formatCurrency(selectedTarget.remaining_expense || selectedTarget.expense_limit)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center pt-3 border-t-2 border-dashed">
-                            <span className="font-bold text-muted-foreground">Limit</span>
-                            <span className="font-bold text-lg bg-gradient-to-r from-red-600 to-rose-600 bg-clip-text text-transparent">
-                              {formatCurrency(selectedTarget.expense_limit)}
-                            </span>
-                          </div>
-                        </div>
-                      </CardHeader>
-                    </Card>
-                  </div>
-
-                  {/* Notes - Enhanced */}
-                  {selectedTarget.notes && (
-                    <Card className="relative overflow-hidden border-2 border-blue-500/20 hover:border-blue-500/50 hover:shadow-lg transition-all duration-300 group">
-                      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      <CardHeader className="relative z-10">
-                        <CardTitle className="text-base font-bold flex items-center gap-2 mb-3">
-                          <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 shadow-md">
-                            <IconEdit className="w-4 h-4 text-white" />
-                          </div>
-                          <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                            Trading Plan & Notes
-                          </span>
-                        </CardTitle>
-                        <CardDescription className="text-sm leading-relaxed p-4 rounded-lg bg-muted/30 border border-dashed">
-                          {selectedTarget.notes}
-                        </CardDescription>
-                      </CardHeader>
-                    </Card>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="trades" className="space-y-6 mt-6">
-                  <div className="flex justify-between items-center p-4 rounded-xl bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border-2 border-blue-200/50 dark:border-blue-800/50">
-                    <div>
-                      <p className="text-sm font-semibold text-muted-foreground">Total Recorded Trades</p>
-                      <p className="text-2xl font-black bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                        {tradingActivities.length} trade{tradingActivities.length !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                    <Dialog open={isTradeDialogOpen} onOpenChange={setIsTradeDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button
-                          size="lg"
-                          disabled={selectedTarget.is_completed}
-                          className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-300 font-semibold"
-                        >
-                          <IconPlus className="w-5 h-5" />
-                          Record Trade
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-[500px]">
-                        <DialogHeader>
-                          <DialogTitle>Record New Trade</DialogTitle>
-                          <DialogDescription>
-                            Add your trading activity (win or loss)
-                          </DialogDescription>
-                        </DialogHeader>
-                        <form onSubmit={handleSubmitTrade}>
-                          <div className="space-y-4 py-4">
-                            <div className="space-y-2">
-                              <Label>Trade Type *</Label>
-                              <div className="flex gap-4">
-                                <Button
-                                  type="button"
-                                  variant={tradeFormData.trade_type === "win" ? "default" : "outline"}
-                                  className="flex-1"
-                                  onClick={() => setTradeFormData({ ...tradeFormData, trade_type: "win" })}
-                                >
-                                  <IconTrendingUp className="w-4 h-4 mr-2" />
+                            <SelectTrigger className="h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="win">
+                                <div className="flex items-center gap-2">
+                                  <IconTrendingUp className="w-3 h-3" />
                                   Win
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant={tradeFormData.trade_type === "loss" ? "destructive" : "outline"}
-                                  className="flex-1"
-                                  onClick={() => setTradeFormData({ ...tradeFormData, trade_type: "loss" })}
-                                >
-                                  <IconTrendingDown className="w-4 h-4 mr-2" />
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="loss">
+                                <div className="flex items-center gap-2">
+                                  <IconTrendingDown className="w-3 h-3" />
                                   Loss
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label htmlFor="amount">Amount (IDR) *</Label>
-                              <Input
-                                id="amount"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={tradeFormData.amount}
-                                onChange={(e) => setTradeFormData({ ...tradeFormData, amount: parseFloat(e.target.value) || 0 })}
-                                required
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="pips">Pips</Label>
-                                <Input
-                                  id="pips"
-                                  type="number"
-                                  min="0"
-                                  step="0.1"
-                                  value={tradeFormData.pips}
-                                  onChange={(e) => setTradeFormData({ ...tradeFormData, pips: parseFloat(e.target.value) || 0 })}
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="lot_size">Lot Size</Label>
-                                <Input
-                                  id="lot_size"
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={tradeFormData.lot_size}
-                                  onChange={(e) => setTradeFormData({ ...tradeFormData, lot_size: parseFloat(e.target.value) || 0 })}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label htmlFor="symbol">Symbol/Pair</Label>
-                              <Input
-                                id="symbol"
-                                type="text"
-                                value={tradeFormData.symbol}
-                                onChange={(e) => setTradeFormData({ ...tradeFormData, symbol: e.target.value })}
-                                placeholder="e.g. EUR/USD"
-                              />
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label htmlFor="trade_description">Description</Label>
-                              <Textarea
-                                id="trade_description"
-                                value={tradeFormData.description}
-                                onChange={(e) => setTradeFormData({ ...tradeFormData, description: e.target.value })}
-                                placeholder="Trade notes, strategy used, market conditions..."
-                                rows={3}
-                              />
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label htmlFor="trade_time">Trade Time</Label>
-                              <Input
-                                id="trade_time"
-                                type="datetime-local"
-                                value={tradeFormData.trade_time ? format(new Date(tradeFormData.trade_time), "yyyy-MM-dd'T'HH:mm") : ""}
-                                onChange={(e) => setTradeFormData({ ...tradeFormData, trade_time: new Date(e.target.value).toISOString() })}
-                              />
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => setIsTradeDialogOpen(false)}
-                              disabled={submitting}
-                            >
-                              Cancel
-                            </Button>
-                            <Button type="submit" disabled={submitting}>
-                              {submitting ? (
-                                <>
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                  Recording...
-                                </>
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={tradeFormData.amount}
+                            onChange={(e) => setTradeFormData({ ...tradeFormData, amount: e.target.value })}
+                            placeholder="Amount"
+                            className="h-8"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={tradeFormData.pips}
+                            onChange={(e) => setTradeFormData({ ...tradeFormData, pips: e.target.value })}
+                            placeholder="Pips"
+                            className="h-8"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={tradeFormData.lot_size}
+                            onChange={(e) => setTradeFormData({ ...tradeFormData, lot_size: e.target.value })}
+                            placeholder="Lot"
+                            className="h-8"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={tradeFormData.symbol}
+                            onValueChange={(value) => setTradeFormData({ ...tradeFormData, symbol: value })}
+                          >
+                            <SelectTrigger className="h-8">
+                              {tradeFormData.symbol ? (
+                                <div className="flex items-center gap-2">
+                                  {(() => {
+                                    const PairIcon = getPairIcon(tradeFormData.symbol);
+                                    return <PairIcon className="w-3.5 h-3.5" />;
+                                  })()}
+                                  <span>{tradeFormData.symbol}</span>
+                                </div>
                               ) : (
-                                "Record Trade"
+                                <SelectValue placeholder="Select Pair" />
                               )}
-                            </Button>
-                          </DialogFooter>
-                        </form>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {TRADING_PAIRS.map((pair) => {
+                                const Icon = pair.icon;
+                                return (
+                                  <SelectItem key={pair.value} value={pair.value}>
+                                    <div className="flex items-center gap-2">
+                                      <Icon className="w-4 h-4" />
+                                      <span>{pair.label}</span>
+                                    </div>
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="text"
+                            value={tradeFormData.description}
+                            onChange={(e) => setTradeFormData({ ...tradeFormData, description: e.target.value })}
+                            placeholder="Notes..."
+                            className="h-8"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="time"
+                            value={tradeFormData.trade_time ? format(new Date(tradeFormData.trade_time), "HH:mm") : ""}
+                            onChange={(e) => {
+                              const today = format(new Date(), "yyyy-MM-dd");
+                              const newDateTime = new Date(`${today}T${e.target.value}:00`).toISOString();
+                              setTradeFormData({ ...tradeFormData, trade_time: newDateTime });
+                            }}
+                            className="h-8"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (!tradeFormData.amount || parseFloat(tradeFormData.amount) <= 0) {
+                                toast.error("Please enter amount");
+                                return;
+                              }
+                              handleSubmitTrade(e as any);
+                            }}
+                            disabled={submitting || !tradeFormData.amount}
+                            className="h-8 gap-1"
+                          >
+                            {submitting ? (
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
+                            ) : (
+                              <>
+                                <IconDeviceFloppy className="w-3 h-3" />
+                                Save
+                              </>
+                            )}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )}
 
-                  {tradingActivities.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <p>No trades recorded yet</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {tradingActivities.map((trade) => (
-                        <div
-                          key={trade.id}
-                          className="p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 space-y-3">
-                              <div className="flex items-center gap-3">
-                                <Badge
-                                  variant={trade.trade_type === "win" ? "default" : "destructive"}
-                                >
-                                  {trade.trade_type === "win" ? (
-                                    <><IconTrendingUp className="w-3.5 h-3.5 mr-1" />Win</>
-                                  ) : (
-                                    <><IconTrendingDown className="w-3.5 h-3.5 mr-1" />Loss</>
-                                  )}
-                                </Badge>
-                                <span className={`text-xl font-bold ${trade.trade_type === "win" ? "text-green-600" : "text-red-600"}`}>
-                                  {formatCurrency(trade.amount)}
-                                </span>
-                                {trade.symbol && (
-                                  <Badge variant="outline" className="text-xs font-mono">
-                                    {trade.symbol}
-                                  </Badge>
-                                )}
-                              </div>
-
-                              <div className="flex gap-6 text-sm">
-                                <div>
-                                  <span className="text-muted-foreground">Time:</span>{" "}
-                                  <span className="font-medium">
-                                    {format(new Date(trade.trade_time), "HH:mm")}
-                                  </span>
-                                </div>
-                                {trade.pips && (
-                                  <div>
-                                    <span className="text-muted-foreground">Pips:</span>{" "}
-                                    <span className="font-medium">{trade.pips}</span>
-                                  </div>
-                                )}
-                                {trade.lot_size && (
-                                  <div>
-                                    <span className="text-muted-foreground">Lot:</span>{" "}
-                                    <span className="font-medium">{trade.lot_size}</span>
-                                  </div>
-                                )}
-                              </div>
-
-                              {trade.description && (
-                                <div className="p-2.5 rounded-md bg-muted/50 border text-sm text-muted-foreground">
-                                  {trade.description}
-                                </div>
+                    {/* Existing Trades */}
+                    {tradingActivities.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                          {todayTarget.is_completed ? "No trades recorded" : "Start recording your trades above"}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      tradingActivities.map((trade) => (
+                        <TableRow key={trade.id}>
+                          <TableCell>
+                            <Badge variant={trade.trade_type === "win" ? "default" : "destructive"} className="gap-1">
+                              {trade.trade_type === "win" ? (
+                                <><IconTrendingUp className="w-3 h-3" />Win</>
+                              ) : (
+                                <><IconTrendingDown className="w-3 h-3" />Loss</>
                               )}
-                            </div>
-
+                            </Badge>
+                          </TableCell>
+                          <TableCell className={`font-semibold ${trade.trade_type === "win" ? "text-green-600" : "text-red-600"}`}>
+                            {formatCurrency(trade.amount)}
+                          </TableCell>
+                          <TableCell>{trade.pips || "-"}</TableCell>
+                          <TableCell>{trade.lot_size || "-"}</TableCell>
+                          <TableCell>
+                            {trade.symbol ? (
+                              <Badge variant="outline" className="font-mono text-xs gap-1.5">
+                                {(() => {
+                                  const PairIcon = getPairIcon(trade.symbol);
+                                  return <PairIcon className="w-3 h-3" />;
+                                })()}
+                                {trade.symbol}
+                              </Badge>
+                            ) : "-"}
+                          </TableCell>
+                          <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
+                            {trade.description || "-"}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {format(new Date(trade.trade_time), "HH:mm")}
+                          </TableCell>
+                          <TableCell>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteTrade(trade.id, trade)}
-                              disabled={selectedTarget.is_completed}
-                              className="hover:bg-destructive/10 hover:text-destructive"
+                              disabled={todayTarget.is_completed}
+                              className="hover:bg-destructive/10 hover:text-destructive h-8"
                             >
                               <IconTrash className="w-4 h-4" />
                             </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
-            </div>
-          )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* History Drawer */}
+      <Sheet open={isHistoryDrawerOpen} onOpenChange={setIsHistoryDrawerOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-[600px] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <IconHistory className="w-5 h-5" />
+              Trading History
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-3">
+            {targets.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No trading history yet</p>
+              </div>
+            ) : (
+              targets.map((target) => (
+                <Card key={target.id} className="hover:shadow-md transition-shadow">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-base">{formatDate(target.date)}</CardTitle>
+                        <CardDescription className="text-xs mt-1">
+                          {target.total_trades || 0} trades • Win rate: {(target.win_rate || 0).toFixed(1)}%
+                        </CardDescription>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {target.is_completed && (
+                          <Badge variant={target.actual_income >= target.income_target ? "default" : "destructive"} className="text-xs">
+                            {target.actual_income >= target.income_target ? <><IconCheck className="w-3 h-3 mr-1" />Hit</> : <><IconX className="w-3 h-3 mr-1" />Missed</>}
+                          </Badge>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(target.id, target)}
+                          className="hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <IconTrash className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <p className="text-muted-foreground">Target:</p>
+                        <p className="font-semibold text-green-600">{formatCurrency(target.income_target)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Actual:</p>
+                        <p className="font-semibold text-green-600">{formatCurrency(target.actual_income || 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Loss Limit:</p>
+                        <p className="font-semibold text-red-600">{formatCurrency(target.expense_limit)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Actual Loss:</p>
+                        <p className="font-semibold text-red-600">{formatCurrency(target.actual_expense || 0)}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
         </SheetContent>
       </Sheet>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialog.isOpen} onOpenChange={(open) => !open && setDeleteDialog({ isOpen: false, type: null, item: null })}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <IconTrash className="w-5 h-5" />
+              {deleteDialog.type === 'target' ? 'Delete Target?' : 'Delete Trade?'}
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete this {deleteDialog.type}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            {deleteDialog.type === 'target' && deleteDialog.item?.target && (
+              <div className="space-y-3 p-4 rounded-lg bg-muted/50 border border-destructive/20">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">Date</span>
+                  <span className="text-sm font-semibold">{formatDate(deleteDialog.item.target.date)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">Target</span>
+                  <span className="text-sm font-semibold text-green-600">{formatCurrency(deleteDialog.item.target.income_target)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">Trades</span>
+                  <span className="text-sm font-semibold">{deleteDialog.item.target.total_trades || 0}</span>
+                </div>
+              </div>
+            )}
+
+            {deleteDialog.type === 'trade' && deleteDialog.item?.trade && (
+              <div className="space-y-3 p-4 rounded-lg bg-muted/50 border border-destructive/20">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">Type</span>
+                  <Badge variant={deleteDialog.item.trade.trade_type === 'win' ? 'default' : 'destructive'} className="gap-1">
+                    {deleteDialog.item.trade.trade_type === 'win' ? (
+                      <><IconTrendingUp className="w-3 h-3" />Win</>
+                    ) : (
+                      <><IconTrendingDown className="w-3 h-3" />Loss</>
+                    )}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">Amount</span>
+                  <span className={`text-sm font-semibold ${deleteDialog.item.trade.trade_type === 'win' ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(deleteDialog.item.trade.amount)}
+                  </span>
+                </div>
+                {deleteDialog.item.trade.symbol && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-muted-foreground">Symbol</span>
+                    <Badge variant="outline" className="font-mono text-xs gap-1.5">
+                      {(() => {
+                        const PairIcon = getPairIcon(deleteDialog.item.trade.symbol);
+                        return <PairIcon className="w-3 h-3" />;
+                      })()}
+                      {deleteDialog.item.trade.symbol}
+                    </Badge>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">Time</span>
+                  <span className="text-sm font-semibold">{format(new Date(deleteDialog.item.trade.trade_time), "HH:mm")}</span>
+                </div>
+              </div>
+            )}
+
+            <p className="text-sm text-muted-foreground mt-4 text-center">
+              {deleteDialog.type === 'trade' && "This will update your daily statistics."}
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialog({ isOpen: false, type: null, item: null })}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              className="gap-2"
+            >
+              <IconTrash className="w-4 h-4" />
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
