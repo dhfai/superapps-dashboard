@@ -21,7 +21,15 @@ import {
   IconLayoutGrid,
   IconClipboardList,
   IconPresentationAnalytics,
-  IconNotebook
+  IconNotebook,
+  IconTransactionDollar,
+  IconDownload,
+  IconBrandYoutube,
+  IconBrandTiktok,
+  IconBrandX,
+  IconBrandFacebook,
+  IconBrandInstagram
+
 } from "@tabler/icons-react"
 
 import { NavCollapsible } from "@/components/Navigation/NavCollapsible"
@@ -41,11 +49,11 @@ import {
 
 const data = {
   navMain: [
-    // {
-    //   title: "Dashboard",
-    //   url: "/dashboard",
-    //   icon: IconDashboard,
-    // },
+    {
+      title: "Dashboard",
+      url: "/dashboard",
+      icon: IconDashboard,
+    },
     // {
     //   title: "Lifecycle",
     //   url: "#",
@@ -68,68 +76,71 @@ const data = {
     // },
   ],
   // Kategori Workspace dengan dropdown
-  workspace: [
+//   workspace: [
+//     {
+//       title: "Overview",
+//       url: "/workspace/overview",
+//       icon: IconLayoutGrid,
+//     },
+//     {
+//       title: "Projects",
+//       url: "#",
+//       icon: IconFolder,
+//       isActive: true,
+//       items: [
+//         {
+//           title: "Active Projects",
+//           url: "/workspace/projects/active",
+//         },
+//         {
+//           title: "Archived",
+//           url: "/workspace/projects/archived",
+//         },
+//         {
+//           title: "Templates",
+//           url: "/workspace/projects/templates",
+//         },
+//       ],
+//     },
+  media: [
+    // {
+    //   title: "Overview",
+    //   url: "/workspace/overview",
+    //   icon: IconLayoutGrid,
+    // },
     {
-      title: "Overview",
-      url: "/workspace/overview",
-      icon: IconLayoutGrid,
-    },
-    {
-      title: "Projects",
+      title: "Media Downloader",
       url: "#",
-      icon: IconFolder,
+      icon: IconDownload,
       isActive: true,
       items: [
         {
-          title: "Active Projects",
+          title: "Youtube",
           url: "/workspace/projects/active",
+          iconSub: IconBrandYoutube
         },
         {
-          title: "Archived",
-          url: "/workspace/projects/archived",
+            title: "Tiktok",
+            url: "/workspace/projects/archived",
+            iconSub: IconBrandTiktok
         },
         {
-          title: "Templates",
-          url: "/workspace/projects/templates",
-        },
-      ],
-    },
-    {
-      title: "Tasks",
-      url: "#",
-      icon: IconClipboardList,
-      items: [
-        {
-          title: "My Tasks",
-          url: "/workspace/tasks/my-tasks",
+            title: "X/Twitter",
+            url: "/workspace/projects/templates",
+            iconSub: IconBrandX
         },
         {
-          title: "Assigned to Me",
-          url: "/workspace/tasks/assigned",
+            title: "Instagram",
+            url: "/workspace/projects/templates",
+            iconSub: IconBrandInstagram
         },
         {
-          title: "Completed",
-          url: "/workspace/tasks/completed",
+            title: "Facebook",
+            url: "/workspace/projects/templates",
+            iconSub: IconBrandFacebook
         },
-      ],
-    },
-    {
-      title: "Reports",
-      url: "#",
-      icon: IconPresentationAnalytics,
-      items: [
-        {
-          title: "Performance",
-          url: "/workspace/reports/performance",
-        },
-        {
-          title: "Analytics",
-          url: "/workspace/reports/analytics",
-        },
-        {
-          title: "Export Data",
-          url: "/workspace/reports/export",
-        },
+
+
       ],
     },
   ],
@@ -140,27 +151,34 @@ const data = {
         icon: IconNotebook,
     },
     {
-      title: "Money Management",
-      url: "/dashboard/money-management/",
-      icon: IconLayoutGrid,
-    },
-    {
-      title: "Target Harian",
-      url: "#",
-      icon: IconFolder,
+      title: "Financial Management",
+      url: "/dashboard/financial",
+      icon: IconTransactionDollar,
       isActive: true,
       items: [
         {
-          title: "Target Profit",
-          url: "/dashboard/money-management/profit",
+            title: "Overview",
+            url: "/dashboard/financial",
         },
         {
-          title: "Progress",
-          url: "/dashboard/money-management/progress",
+            title: "Transactions",
+            url: "/dashboard/financial/transactions",
         },
         {
-          title: "Templates",
-          url: "/dashboard/money-management/templates",
+            title: "Daily Targets",
+            url: "/dashboard/financial/daily-targets",
+        },
+        {
+            title: "Goals",
+            url: "/dashboard/financial/goals",
+        },
+        {
+            title: "Budgets",
+            url: "/dashboard/financial/budgets",
+        },
+        {
+            title: "Backtest",
+            url: "/dashboard/financial/backtest",
         },
       ],
     },
@@ -331,14 +349,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavCollapsible items={data.navMain} />
 
 
         {/* Kategori Catatan dengan Dropdown */}
         <NavCollapsible items={data.catatan} label="Catatan" />
 
-        {/* Kategori Workspace dengan Dropdown */}
-        <NavCollapsible items={data.workspace} label="Workspace" />
+        {/* Kategori Media dengan Dropdown */}
+        <NavCollapsible items={data.media} label="Media" />
 
         {/* Kategori Content dengan Dropdown */}
         <NavCollapsible items={data.content} label="Content" />

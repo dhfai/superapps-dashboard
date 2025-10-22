@@ -9,6 +9,7 @@ import {
 } from "@tabler/icons-react"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/lib/context/AuthContext"
+import { useRouter } from "next/navigation"
 
 import {
   Avatar,
@@ -42,6 +43,7 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const { logout } = useAuth()
+  const router = useRouter()
   const [mounted, setMounted] = useState(false)
 
   // Prevent hydration mismatch
@@ -51,6 +53,10 @@ export function NavUser({
 
   const handleLogout = async () => {
     await logout()
+  }
+
+  const handleNavigateToProfile = () => {
+    router.push('/dashboard/profile')
   }
 
   if (!mounted) {
@@ -119,21 +125,21 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={handleNavigateToProfile} className="cursor-pointer">
                 <IconUserCircle />
                 Account
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer">
                 <IconCreditCard />
                 Billing
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer">
                 <IconNotification />
                 Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout}>
+            <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
               <IconLogout />
               Log out
             </DropdownMenuItem>

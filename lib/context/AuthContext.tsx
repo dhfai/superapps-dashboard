@@ -20,38 +20,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
+
+  // Set mounted state first
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Load user and token from localStorage on mount
   useEffect(() => {
+    if (!mounted) return;
+
     const loadAuth = async () => {
-      const storedToken = tokenService.getToken();
-      const storedUser = userService.getUser();
+      try {
+        const storedToken = tokenService.getToken();
+        const storedUser = userService.getUser();
 
-      if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(storedUser);
+        if (storedToken && storedUser) {
+          // Set immediately to prevent white flash
+          setToken(storedToken);
+          setUser(storedUser);
+          setLoading(false); // Set loading false immediately with cached data
 
-        // Verify token is still valid by fetching user info
-        try {
-          const response = await authService.getUserInfo(storedToken);
-          if (response.success && response.data) {
-            setUser(response.data);
-            userService.setUser(response.data);
-          } else {
-            // Token is invalid, clear everything
+          // Then verify in background
+          try {
+            const response = await authService.getUserInfo(storedToken);
+            if (response.success && response.data) {
+              setUser(response.data);
+              userService.setUser(response.data);
+            } else {
+              // Token is invalid, clear everything
+              handleLogout();
+            }
+          } catch (error) {
+            console.error("Failed to verify token:", error);
             handleLogout();
           }
-        } catch (error) {
-          console.error("Failed to verify token:", error);
-          handleLogout();
+        } else {
+          setLoading(false);
         }
+      } catch (error) {
+        console.error("Failed to load auth:", error);
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     loadAuth();
-  }, []);
+  }, [mounted]);
 
   const login = async (email: string, password: string) => {
     try {

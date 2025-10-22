@@ -15,9 +15,10 @@ export default function Layout({
           "--header-height": "calc(var(--spacing) * 12)",
         } as React.CSSProperties
       }
+      suppressHydrationWarning
     >
       <AppSidebar variant="inset" />
-      <SidebarInset>
+      <SidebarInset suppressHydrationWarning>
         <SiteHeader />
         {children}
       </SidebarInset>
