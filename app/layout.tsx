@@ -25,10 +25,6 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // suppressHydrationWarning is used here to prevent warnings from:
-    // 1. Theme switching (class attribute changes)
-    // 2. Browser extensions that inject elements into the DOM
-    // 3. Client-side only features like timezone detection
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
